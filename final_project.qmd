@@ -7,7 +7,12 @@ format: pdf
 
 \noindent Project Due: Our Final Exam Time.
 
+```{r}
+#| label: install packages
 
+# install.packages("rvest")
+library("rvest")
+```
 
 
 ## Assignment Description
@@ -30,7 +35,218 @@ Here are the sections on how the project will be evaluated (A rubric will be rel
 
 # The Dataset
 
-We're using the "Collections" dataset from the Museum of Modern Art (MoMA)
-```{r}
+We're using the "Collections" dataset from the Museum of Modern Art (MoMA), which actually comes as 2 separate datasets: "Artists" and "Artworks". The observations in Artworks include both the artist's name and their constituentID, which are both variables in the Artists dataset. So, we're gonna start by just merging the two together. The data types between the two sets are different, so we also have to do some wrangling first.
 
+Many of the artists have missing nationality and/or biography information, despite the information being readily available; this is presumably just because the information wasn't included in the MoMA page. To counter this, we (are trying to) scrape information about different artists to reference with our missing nationalities.
+```{r}
+#| label: load & tidy data
+
+# shared variables: ConstituentID, DisplayName (Artist), ArtistBio, Nationality, Gender,
+# BeginDate, EndDate, 
+
+artists <- Artists %>% 
+  mutate(ConstituentID = as.character(ConstituentID))
+
+artworks <- full_join(artists, Artworks, by = join_by(ConstituentID, DisplayName == Artist))
+
+Artists %>% 
+  filter(is.na(Nationality))
+
+Artworks %>% 
+  filter(ConstituentID == 201)
+```
+
+# EDA
+
+As part of our EDA and data tidying, we need to consider which wars were going on when each piece was created. To start, just reference the oldest and most recent pieces:
+```{r}
+#| label: oldest work
+
+Artworks %>% 
+  drop_na(Date) %>% 
+  mutate(Date = str_extract(Date, "\\d{4}")) %>% 
+  arrange(Date)
+```
+
+The oldest work here is from 1768. To add our new column, we first need a list of all wars fought since 1768. Thankfully, Wikipedia has well-organized tables with this information: https://en.wikipedia.org/wiki/Category:Lists_of_wars_by_date
+We need to start by scraping the relevant pages, and extracting the tables into usable objects:
+```{r}
+# start by just saving the urls, so it's more manageable lengthwise
+#| label: scrape war data
+
+wars_1500_1799_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1500%E2%80%931799"
+wars_1800_1899_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1800%E2%80%931899"
+wars_1900_1944_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1900%E2%80%931944"
+wars_1945_1989_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1945%E2%80%931989"
+wars_1990_2002_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1990%E2%80%932002"
+wars_2003_2019_url <- "https://en.wikipedia.org/wiki/List_of_wars:_2003%E2%80%932019"
+wars_2020_now_url <- "https://en.wikipedia.org/wiki/List_of_wars:_2020%E2%80%93present"
+
+# now read the html files using rvest
+wars_1500_1799_html <- read_html(wars_1500_1799_url)
+wars_1800_1899_html <- read_html(wars_1800_1899_url)
+wars_1900_1944_html <- read_html(wars_1900_1944_url)
+wars_1945_1989_html <- read_html(wars_1945_1989_url)
+wars_1990_2002_html <- read_html(wars_1990_2002_url)
+wars_2003_2019_html <- read_html(wars_2003_2019_url)
+wars_2020_now_html <- read_html(wars_2020_now_url)
+
+# we need to split our datasets up into decades, since that's how the data is stored
+# aka, extract the actual tables
+
+# 1700s #
+wars_1700_1799 <- wars_1500_1799_html %>% 
+  html_elements(".wikitable") %>% 
+  html_table
+wars_1700_1799 <- wars_1700_1799[[3]]
+
+# 1800s #
+wars_1800_1899 <- wars_1800_1899_html %>% 
+  html_elements("table.wikitable.sortable") %>% 
+  html_table
+wars_1800_1809 <- wars_1800_1899[[1]]
+wars_1810_1819 <- wars_1800_1899[[2]]
+wars_1820_1829 <- wars_1800_1899[[3]]
+wars_1830_1839 <- wars_1800_1899[[4]]
+wars_1840_1849 <- wars_1800_1899[[5]]
+wars_1850_1859 <- wars_1800_1899[[6]]
+wars_1860_1869 <- wars_1800_1899[[7]]
+wars_1870_1879 <- wars_1800_1899[[8]]
+wars_1880_1889 <- wars_1800_1899[[9]]
+wars_1890_1899 <- wars_1800_1899[[10]]
+
+# first half of the 1900s #
+wars_1900_1944 <- wars_1900_1944_html %>% 
+  html_elements("table.wikitable.sortable") %>% 
+  html_table
+wars_1900_1909 <- wars_1900_1944[[1]]
+wars_1910_1919 <- wars_1900_1944[[2]]
+wars_1920_1929 <- wars_1900_1944[[3]]
+wars_1930_1944 <- wars_1900_1944[[4]]
+
+# second half of the 1900s #
+wars_1945_1989 <- wars_1945_1989_html %>% 
+  html_elements("table.wikitable.sortable") %>% 
+  html_table
+wars_1945_1949 <- wars_1945_1989[[1]]
+wars_1950_1959 <- wars_1945_1989[[2]]
+wars_1960_1969 <- wars_1945_1989[[3]]
+wars_1970_1979 <- wars_1945_1989[[4]]
+wars_1980_1989 <- wars_1945_1989[[5]]
+
+# the 90s #
+wars_1990_2002 <- wars_1990_2002_html %>% 
+  html_element("table.wikitable") %>% 
+  html_table
+
+# 2003 to 2019
+wars_2003_2019 <- wars_2003_2019_html %>% 
+  html_elements("table.wikitable.sortable") %>% 
+  html_table
+wars_2003 <- wars_2003_2019[[1]] # this one will need some cleaning
+wars_2004 <- wars_2003_2019[[2]]
+wars_2005 <- wars_2003_2019[[3]]
+wars_2006_2009 <- wars_2003_2019[[4]]
+wars_2010_2019 <- wars_2003_2019[[5]]
+
+# 2020 to today
+wars_2020_now <- wars_2020_now_html %>% 
+  html_element("table.wikitable.sortable") %>% 
+  html_table
+```
+
+Our next problem is tidying these new datasets (and perhaps combining them down into one). The biggest problem is the "belligerents" column(s); there's all sorts of formatting within the column, and countries might not be listed under the same names as our other datasets. Let's look at our nationalities to see:
+
+```{r}
+#| label: count nationalities
+
+Artists %>% 
+  group_by(Nationality) %>% 
+  count()
+```
+
+We can use this as a guideline for which names to use as we tidy the wars datasets. For now, let's start by binding all of our wars together into one big list, and fixing the notation on it:
+```{r}
+#| label: combining war datasets
+
+# the lists for 1945 onward use different naming syntax
+# but we also can't use rename() when columns have identical names
+# so instead, we make a 1945 to now dataset and rename that one!
+
+wars_1945_now <- bind_rows(list(
+  wars_1945_1949,
+  wars_1950_1959,
+  wars_1960_1969,
+  wars_1970_1979,
+  wars_1980_1989,
+  wars_1990_2002,
+  wars_2003,
+  wars_2004,
+  wars_2005,
+  wars_2006_2009,
+  wars_2010_2019,
+  wars_2020_now
+))
+
+# the 1990-2002 has a random capital c on "Name of Conflict", so we have
+# to be tricky to rename it
+wars_1945_now <- wars_1945_now %>% 
+  mutate("Conflict Name" = coalesce(wars_1945_now$"Name of conflict", wars_1945_now$"Name of Conflict")) %>% 
+  select(-c("Name of Conflict", "Name of conflict")) %>% 
+  rename("Name of Conflict" = "Conflict Name",
+         Start = Started,
+         Finish = Ended,
+         Victorious = Belligerents...4,
+         Defeated = Belligerents...5) %>% 
+  filter(Start != "Started")
+
+# since we're already renaming the double "belligerents" columns, we might
+# as well pre-merge 1700 to 1944 as well:
+wars_1700_1944 <- bind_rows(list(
+  wars_1700_1799,
+  wars_1800_1809,
+  wars_1810_1819,
+  wars_1820_1829,
+  wars_1830_1839,
+  wars_1840_1849,
+  wars_1850_1859,
+  wars_1860_1869,
+  wars_1870_1879,
+  wars_1880_1889,
+  wars_1890_1899,
+  wars_1900_1909,
+  wars_1910_1919,
+  wars_1920_1929,
+  wars_1930_1944
+))
+
+wars_1700_1944 <- wars_1700_1944 %>% 
+  mutate("Conflict Name" = coalesce(wars_1700_1944$"Name of conflict", wars_1700_1944$"Name of Conflict")) %>% 
+  select(-c("Name of Conflict", "Name of conflict")) %>% 
+  rename("Name of Conflict" = "Conflict Name",
+         Victorious = Belligerents...4,
+         Defeated = Belligerents...5) %>% 
+  filter(Start != "Start")
+
+wars_1700_now <- bind_rows(list(
+  wars_1700_1944,
+  wars_1945_now
+))
+```
+
+Part of the problem here is that some values have Wikipedia notes on them, in the form of [note id]. The easiest first step here is to just get rid of those:
+```{r}
+wars_1700_now %>% 
+  mutate(Start_dig = str_extract(Start, "[:digit:]{4}"),
+         Finish_dig = str_extract(Finish, "[:digit:]{4}"),
+         Matching = Start_dig == Start & Finish_dig == Finish) %>% 
+  filter(Matching == FALSE)
+
+wars_1700_now %>% 
+  mutate(Start = str_remove(Start, "\\[[[:alnum:]]+\\]"),
+         Finish = str_remove(Finish, "\\[[[:alnum:]]+\\]"),
+         Victorious = str_remove(Victorious, "\\[[[:alnum:]]+\\]"),
+         Defeated = str_remove_all(Defeated, "\\[[[:alnum:]]+[[:space:]]*[[:alnum:]]*\\]"),
+         "Name of Conflict" = str_remove(wars_1700_now$"Name of Conflict", "\\[[[:alnum:]]+\\]")) %>% 
+  arrange(desc(Finish))
 ```
