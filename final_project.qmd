@@ -26,3 +26,10 @@ Here are the sections on how the project will be evaluated (A rubric will be rel
 
 
 ## Place Work Below!!
+
+# The Dataset
+
+We're using the "Collections" dataset from the Museum of Modern Art (MoMA); the raw CSVs were too large to upload into github or RStudio directly, so we had to use PositCloud to reduce the file size first (mock code below):
+
+```{r}
+```
