@@ -1,0 +1,28 @@
+---
+title: "Final Project: Data Science Culmination Project"
+format: pdf
+---
+
+\noindent Project Proposal: Week of November 18th-22nd
+
+\noindent Project Due: Our Final Exam Time.
+
+
+
+## Assignment Description
+
+This is it! This is the culmination of all your work in both of the data science courses! The parameters of this project are very general because I want to give you the chance to explore your interests and be creative. Generally, your project will go through the entire data science process. The project will involve a formal written document as well as a presentation. The written document will be worth 2/3rd's of the final grade and the presentation will be worth the other 1/3rd. 
+
+
+Here are the sections on how the project will be evaluated (A rubric will be released later with more specific parameters).
+
+* Questions and Goals: The questions you wish to answer and the goals of the project. You should have multiple questions that you answer in the project. Not all of them need to be questions that require modeling to answer, but some of them need to be.
+* Data Acquisition: The project describes how the data was obtained and gives substantial backround on the data. 
+* Data Preprocessing: Throughout the project, the proper preprocessing techniques (variable transformations, reshaping data, etc.) are utilized.
+* Exploratory Data Analysis: Proper exploratory plots and summarizes are utilized to describe the data and showcase certain interesting aspects of the data that you will explore later in the project.
+* Modeling and Analysis: This is a large portion of the project! You work toward answer the questions/goals you stated at the beginning. Your project needs to include at least 3 modeling techniques we discussed in class. You will fit, tune, and compare the methods. You will discuss the results and why they make sense in context. This section can include a wide range of modeling techniques. Your proposal should be focused on describing what you want to do in this section.
+* Data Product: You present your data, models, and conclusions in a professional manner. This could include an interactive data product.
+
+
+
+## Place Work Below!!
