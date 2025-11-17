@@ -9,6 +9,7 @@ format: pdf
 
 
 
+
 ## Assignment Description
 
 This is it! This is the culmination of all your work in both of the data science courses! The parameters of this project are very general because I want to give you the chance to explore your interests and be creative. Generally, your project will go through the entire data science process. The project will involve a formal written document as well as a presentation. The written document will be worth 2/3rd's of the final grade and the presentation will be worth the other 1/3rd. 
@@ -29,7 +30,7 @@ Here are the sections on how the project will be evaluated (A rubric will be rel
 
 # The Dataset
 
-We're using the "Collections" dataset from the Museum of Modern Art (MoMA); the raw CSVs were too large to upload into github or RStudio directly, so we had to use PositCloud to reduce the file size first (mock code below):
-
+We're using the "Collections" dataset from the Museum of Modern Art (MoMA)
 ```{r}
+
 ```
