@@ -12,6 +12,7 @@ format: pdf
 
 # install.packages("rvest")
 library("rvest")
+library("tidyverse")
 ```
 
 
@@ -44,16 +45,19 @@ Many of the artists have missing nationality and/or biography information, despi
 # shared variables: ConstituentID, DisplayName (Artist), ArtistBio, Nationality, Gender,
 # BeginDate, EndDate, 
 
+Artists <- read_csv("Artists.zip")
+
 artists <- Artists %>% 
   mutate(ConstituentID = as.character(ConstituentID))
 
-artworks <- full_join(artists, Artworks, by = join_by(ConstituentID, DisplayName == Artist))
+artworks <- full_join(artists, Artworks, by = join_by(ConstituentID, DisplayName == Artist)) %>% 
+  mutate(Date = as.integer(str_extract(Date, "\\d{4}")))
 
 Artists %>% 
   filter(is.na(Nationality))
 
 Artworks %>% 
-  filter(ConstituentID == 201)
+  filter(ConstituentID == 2)
 ```
 
 # EDA
@@ -163,6 +167,9 @@ Our next problem is tidying these new datasets (and perhaps combining them down 
 Artists %>% 
   group_by(Nationality) %>% 
   count()
+
+Artists %>% 
+  filter(Nationality == "Caribbean")
 ```
 
 We can use this as a guideline for which names to use as we tidy the wars datasets. For now, let's start by binding all of our wars together into one big list, and fixing the notation on it:
@@ -245,8 +252,87 @@ wars_1700_now %>%
 wars_1700_now %>% 
   mutate(Start = str_remove(Start, "\\[[[:alnum:]]+\\]"),
          Finish = str_remove(Finish, "\\[[[:alnum:]]+\\]"),
-         Victorious = str_remove(Victorious, "\\[[[:alnum:]]+\\]"),
-         Defeated = str_remove_all(Defeated, "\\[[[:alnum:]]+[[:space:]]*[[:alnum:]]*\\]"),
+         # extract capital letters followed by more letters (aka, proper nouns/names)
+         Victorious = str_extract_all(Victorious, "[:upper:]+[:alpha:]+"),
+         # collapse that list into a string to get (roughly) the countries involved
+         Victorious = str_c(Victorious),
+         # cut out the string stuff so it's just a normal looking list
+         Victorious = str_remove_all(Victorious, 'c\\(|\\"|\\)'),
+         Defeated = str_extract_all(Defeated, "[:upper:]+[:alpha:]+"),
+         Defeated = str_c(Defeated),
+         Defeated = str_remove_all(Defeated, 'c\\(|\\"|\\)'),
          "Name of Conflict" = str_remove(wars_1700_now$"Name of Conflict", "\\[[[:alnum:]]+\\]")) %>% 
   arrange(desc(Finish))
+```
+Now comes the unfortunate part. Our *artists* have nationalities (e.g., "French"), but our *wars* have countries (e.g., "France"). I don't think there's any good way to automate this, unfortunately; we just have to suck it up and make a big list of countries & nationality names:
+```{r}
+#| label: nationality vs nation list
+
+nations <- c("Afghanistan",
+             "Albania",
+             "Algeria",
+             "United States",
+             "Australian Aborigines",
+             "Argentina",
+             "Australia",
+             "Austria",
+             "Azerbaijan",
+             "Bahamas",
+             "Bangladesh",
+             "Belgium",
+             "Benin",
+             "Bolivia",
+             "Bosnia",
+             "Great Britain",
+             "United Kingdom",
+             "Bulgaria",
+             "Burkina Faso",
+             "Cambodia",
+             "Cameroon",
+             "Canada",
+             "Catalonia",
+             "Chile",
+             "China",
+             "Colombia",
+             "")
+```
+
+Let's maybe try a different approach for now. The World Wars famously impacted, well, the world. Let's just check when the art pieces were made, to see if they were during one of the two world wars:
+```{r}
+#| label: world wars column
+
+wars_artworks <- artworks %>% 
+  mutate(wars = case_when(
+    Date < 1914 ~ "Pre WW1",
+    between(Date, 1914, 1918) ~ "WW1",
+    between(Date, 1918, 1939) ~ "Between wars",
+    between(Date, 1939, 1945) ~ "WW2",
+    Date > 1945 ~ "Post WW2",
+    .default = "None"
+  ))
+```
+
+Now that we have some simple sorting, let's check if war affects medium at all. I'm thinking "classification" would be a good place to start:
+
+```{r}
+#| label: war-classification eda
+
+wars_artworks %>% 
+  filter(wars != "None") %>% 
+  ggplot(aes(x = Classification)) + geom_bar() +
+  facet_grid(vars(wars)) + scale_x_discrete(guide = guide_axis(angle = 45))
+
+wars_artworks %>% 
+  filter(wars != "None") %>% 
+  # count how many pieces are in each classification/war period combo
+  count(wars, Classification) %>% 
+  group_by(wars) %>% 
+  mutate(n_tot = sum(n), # count how many pieces are in each war period
+         prop = n / n_tot * 100, # get what percent of "pieces from this period" each category makes up
+         prop = format(prop, scientific = FALSE)) %>% 
+  select(wars, Classification, prop) %>%
+  pivot_wider(names_from = wars, values_from = prop) %>% # move war periods to columns
+  relocate("Between wars", .after = WW1) %>% 
+  relocate("Post WW2", .after = WW2) %>% 
+  replace_na(list("Pre WW1" = "0", WW1 = "0", "Between wars" = "0", WW2 = "0", "Post WW2" = "0"))
 ```
