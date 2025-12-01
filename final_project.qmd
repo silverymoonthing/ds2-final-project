@@ -45,6 +45,7 @@ Many of the artists have missing nationality and/or biography information, despi
 # shared variables: ConstituentID, DisplayName (Artist), ArtistBio, Nationality, Gender,
 # BeginDate, EndDate, 
 
+Artworks <- read_csv("Artworks.zip")
 Artists <- read_csv("Artists.zip")
 
 artists <- Artists %>% 
@@ -303,12 +304,26 @@ Let's maybe try a different approach for now. The World Wars famously impacted, 
 
 wars_artworks <- artworks %>% 
   mutate(wars = case_when(
-    Date < 1914 ~ "Pre WW1",
-    between(Date, 1914, 1918) ~ "WW1",
-    between(Date, 1918, 1939) ~ "Between wars",
-    between(Date, 1939, 1945) ~ "WW2",
-    Date > 1945 ~ "Post WW2",
-    .default = "None"
+    Date < 1914 ~ "pre_ww1",
+    between(Date, 1914, 1918) ~ "ww1",
+    between(Date, 1918, 1939) ~ "btw_wars",
+    between(Date, 1939, 1945) ~ "ww2",
+    Date > 1945 ~ "post_ww2",
+    .default = "none"
+  ))
+
+war_range_artworks <- artworks %>% 
+  mutate(wars = case_when(
+    Date < 1909 ~ "pre_ww1",
+    between(Date, 1909, 1914) ~ "ww1_rising",
+    between(Date, 1914, 1918) ~ "ww1",
+    between(Date, 1918, 1923) ~ "ww1_falling",
+    between(Date, 1923, 1934) ~ "btw_wars",
+    between(Date, 1934, 1939) ~ "ww2_rising",
+    between(Date, 1939, 1945) ~ "ww2",
+    between(Date, 1945, 1950) ~ "ww2_falling",
+    Date > 1950 ~ "post_ww2",
+    .default = "none"
   ))
 ```
 
@@ -318,12 +333,12 @@ Now that we have some simple sorting, let's check if war affects medium at all. 
 #| label: war-classification eda
 
 wars_artworks %>% 
-  filter(wars != "None") %>% 
+  filter(wars == "ww1" | wars == "ww2") %>% 
   ggplot(aes(x = Classification)) + geom_bar() +
   facet_grid(vars(wars)) + scale_x_discrete(guide = guide_axis(angle = 45))
 
 wars_artworks %>% 
-  filter(wars != "None") %>% 
+  filter(wars != "none") %>% 
   # count how many pieces are in each classification/war period combo
   count(wars, Classification) %>% 
   group_by(wars) %>% 
@@ -332,7 +347,86 @@ wars_artworks %>%
          prop = format(prop, scientific = FALSE)) %>% 
   select(wars, Classification, prop) %>%
   pivot_wider(names_from = wars, values_from = prop) %>% # move war periods to columns
-  relocate("Between wars", .after = WW1) %>% 
-  relocate("Post WW2", .after = WW2) %>% 
-  replace_na(list("Pre WW1" = "0", WW1 = "0", "Between wars" = "0", WW2 = "0", "Post WW2" = "0"))
+  relocate(btw_wars, .after = ww1) %>% 
+  relocate(post_ww2, .after = ww2) %>% 
+  replace_na(list(pre_ww1 = "0", ww1 = "0", btw_wars = "0", ww2 = "0", post_ww2 = "0")) %>%
+  mutate(pre_ww1 = as.double(pre_ww1),
+          ww1 = as.double(ww1),
+          btw_wars = as.double(btw_wars),
+          ww2 = as.double(ww2),
+          post_ww2 = as.double(post_ww2)) %>% 
+  filter(pre_ww1 > 1 | ww1 > 1 | btw_wars > 1 | ww2 > 1 | post_ww2 > 1)
+
+
+# same thing, but using the war range dataset
+
+war_range_artworks %>% 
+  filter(wars != "none") %>% 
+  # count how many pieces are in each classification/war period combo
+  count(wars, Classification) %>% 
+  group_by(wars) %>% 
+  mutate(n_tot = sum(n), # count how many pieces are in each war period
+         prop = n / n_tot * 100, # get what percent of "pieces from this period" each category makes up
+         prop = format(prop, scientific = FALSE)) %>% 
+  select(wars, Classification, prop) %>%
+  pivot_wider(names_from = wars, values_from = prop) %>% # move war periods to columns
+  relocate(ww1_rising, .after = pre_ww1) %>% 
+  relocate(btw_wars, .after = ww1_falling) %>% 
+  relocate(ww2_rising, .after = btw_wars) %>% 
+  relocate(post_ww2, .after = ww2_falling) %>% 
+  replace_na(list(pre_ww1 = "0",
+                  ww1_rising = "0",
+                  ww1 = "0",
+                  ww1_falling = "0",
+                  btw_wars = "0",
+                  ww2_rising = "0",
+                  ww2 = "0",
+                  ww2_falling = "0",
+                  post_ww2 = "0")) %>%
+  mutate(pre_ww1 = as.double(pre_ww1),
+          ww1_rising = as.double(ww1_rising),
+          ww1 = as.double(ww1),
+          ww1_falling = as.double(ww1_falling),
+          btw_wars = as.double(btw_wars),
+          ww2_rising = as.double(ww2_rising),
+          ww2 = as.double(ww2),
+          ww2_falling = as.double(ww2_falling),
+          post_ww2 = as.double(post_ww2)) %>% 
+  filter(pre_ww1 > 1 |
+           ww1_rising > 1 |
+           ww1 > 1 |
+           ww1_falling > 1 |
+           btw_wars > 1 |
+           ww2_rising > 1 |
+           ww2 > 1 |
+           ww2_falling > 1 |
+           post_ww2 > 1)
+
+artworks %>% 
+  ggplot(aes(x = Date)) + geom_histogram()
+```
+
+Some interesting notes:
+
+* Lots of categories have entries from between the wars and after WW2, but not WW1 or WW2
+* Over 52% of pre-WW1 entries are photographs; the highest any other category gets in a period is 34%.
+* Categories that dip during war: design, film (to 0), photograph, poster
+* Categories that rise during war: drawing, frank lloyd wright archive (this one has gotta be a coincidence), painting
+* Digital, document, multiple, performance, publication pieces were only made between or after the wars
+
+Notes on the ranged data:
+
+* Over 6% of entries from just after WW2 were notebooks, comapared to .01% during WW2
+* Architecture entries were much higher proportionally during WW1 than right before or after it, while they were lower during WW2
+* 
+
+Now, let's take a look at dimensions of different pieces:
+```{r}
+#| label: dimension of piece vs wartime
+
+wars_artworks %>% 
+  filter(!is.na(`Height (cm)`) & !is.na(`Width (cm)`)) %>% 
+  mutate(area = `Height (cm)` * `Width (cm)`) %>%
+  filter(area < 10000 & wars != 'none') %>% 
+  ggplot(aes(x = area)) + geom_histogram() + facet_wrap(vars(wars))
 ```
