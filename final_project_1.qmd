@@ -10,6 +10,9 @@ format: pdf
 ```{r}
 #| label: install packages
 
+#install.packages('tidyverse')
+library('tidyverse')
+
 # install.packages("rvest")
 library("rvest")
 ```
@@ -253,10 +256,27 @@ wars_1700_now %>%
 
 
 
+Here I think it best if we take a try at seeing artists were born and matching
+them to when a war may have started or intersected their lives.
+
+I will be considering western countries, primarily in Europe during the
+era of WWI and WWII.
+
+Look at word doc for further information:
 
 ```{r}
 
+FILT_artists_west <- artists|>
+  filter(artists$Nationality == c('French','American','British'))|>
+  mutate(Range_WW = BeginDate>=1900 & BeginDate <= 1944)|>
+  filter(Range_WW == TRUE)|>
+  arrange(by_group = Nationality)
+
+FILT_artists_west
+
+artists
 ```
+
 
 
 
