@@ -11,8 +11,17 @@ format: pdf
 #| label: install packages
 
 # install.packages("rvest")
+# install.packages("tidymodels")
+# install.packages("rpart")
+# install.packages("rpart.plot")
+# install.packages("MASS")
 library("rvest")
 library("tidyverse")
+library("tidymodels")
+library("rpart")
+library("rpart.plot")
+library("MASS")
+library("class")
 ```
 
 
@@ -52,7 +61,15 @@ artists <- Artists %>%
   mutate(ConstituentID = as.character(ConstituentID))
 
 artworks <- full_join(artists, Artworks, by = join_by(ConstituentID, DisplayName == Artist)) %>% 
-  mutate(Date = as.integer(str_extract(Date, "\\d{4}")))
+  mutate(Date = as.integer(str_extract(Date, "\\d{4}"))) %>% 
+  rename(cirumference = "Circumference (cm)",
+         depth = "Depth (cm)",
+         diameter = "Diameter (cm)",
+         height = "Height (cm)",
+         length = "Length (cm)",
+         width = "Width (cm)",
+         seat_height = "Seat Height (cm)",
+         duration = "Duration (sec.)")
 
 Artists %>% 
   filter(is.na(Nationality))
@@ -73,93 +90,6 @@ Artworks %>%
   arrange(Date)
 ```
 
-The oldest work here is from 1768. To add our new column, we first need a list of all wars fought since 1768. Thankfully, Wikipedia has well-organized tables with this information: https://en.wikipedia.org/wiki/Category:Lists_of_wars_by_date
-We need to start by scraping the relevant pages, and extracting the tables into usable objects:
-```{r}
-# start by just saving the urls, so it's more manageable lengthwise
-#| label: scrape war data
-
-wars_1500_1799_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1500%E2%80%931799"
-wars_1800_1899_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1800%E2%80%931899"
-wars_1900_1944_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1900%E2%80%931944"
-wars_1945_1989_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1945%E2%80%931989"
-wars_1990_2002_url <- "https://en.wikipedia.org/wiki/List_of_wars:_1990%E2%80%932002"
-wars_2003_2019_url <- "https://en.wikipedia.org/wiki/List_of_wars:_2003%E2%80%932019"
-wars_2020_now_url <- "https://en.wikipedia.org/wiki/List_of_wars:_2020%E2%80%93present"
-
-# now read the html files using rvest
-wars_1500_1799_html <- read_html(wars_1500_1799_url)
-wars_1800_1899_html <- read_html(wars_1800_1899_url)
-wars_1900_1944_html <- read_html(wars_1900_1944_url)
-wars_1945_1989_html <- read_html(wars_1945_1989_url)
-wars_1990_2002_html <- read_html(wars_1990_2002_url)
-wars_2003_2019_html <- read_html(wars_2003_2019_url)
-wars_2020_now_html <- read_html(wars_2020_now_url)
-
-# we need to split our datasets up into decades, since that's how the data is stored
-# aka, extract the actual tables
-
-# 1700s #
-wars_1700_1799 <- wars_1500_1799_html %>% 
-  html_elements(".wikitable") %>% 
-  html_table
-wars_1700_1799 <- wars_1700_1799[[3]]
-
-# 1800s #
-wars_1800_1899 <- wars_1800_1899_html %>% 
-  html_elements("table.wikitable.sortable") %>% 
-  html_table
-wars_1800_1809 <- wars_1800_1899[[1]]
-wars_1810_1819 <- wars_1800_1899[[2]]
-wars_1820_1829 <- wars_1800_1899[[3]]
-wars_1830_1839 <- wars_1800_1899[[4]]
-wars_1840_1849 <- wars_1800_1899[[5]]
-wars_1850_1859 <- wars_1800_1899[[6]]
-wars_1860_1869 <- wars_1800_1899[[7]]
-wars_1870_1879 <- wars_1800_1899[[8]]
-wars_1880_1889 <- wars_1800_1899[[9]]
-wars_1890_1899 <- wars_1800_1899[[10]]
-
-# first half of the 1900s #
-wars_1900_1944 <- wars_1900_1944_html %>% 
-  html_elements("table.wikitable.sortable") %>% 
-  html_table
-wars_1900_1909 <- wars_1900_1944[[1]]
-wars_1910_1919 <- wars_1900_1944[[2]]
-wars_1920_1929 <- wars_1900_1944[[3]]
-wars_1930_1944 <- wars_1900_1944[[4]]
-
-# second half of the 1900s #
-wars_1945_1989 <- wars_1945_1989_html %>% 
-  html_elements("table.wikitable.sortable") %>% 
-  html_table
-wars_1945_1949 <- wars_1945_1989[[1]]
-wars_1950_1959 <- wars_1945_1989[[2]]
-wars_1960_1969 <- wars_1945_1989[[3]]
-wars_1970_1979 <- wars_1945_1989[[4]]
-wars_1980_1989 <- wars_1945_1989[[5]]
-
-# the 90s #
-wars_1990_2002 <- wars_1990_2002_html %>% 
-  html_element("table.wikitable") %>% 
-  html_table
-
-# 2003 to 2019
-wars_2003_2019 <- wars_2003_2019_html %>% 
-  html_elements("table.wikitable.sortable") %>% 
-  html_table
-wars_2003 <- wars_2003_2019[[1]] # this one will need some cleaning
-wars_2004 <- wars_2003_2019[[2]]
-wars_2005 <- wars_2003_2019[[3]]
-wars_2006_2009 <- wars_2003_2019[[4]]
-wars_2010_2019 <- wars_2003_2019[[5]]
-
-# 2020 to today
-wars_2020_now <- wars_2020_now_html %>% 
-  html_element("table.wikitable.sortable") %>% 
-  html_table
-```
-
 Our next problem is tidying these new datasets (and perhaps combining them down into one). The biggest problem is the "belligerents" column(s); there's all sorts of formatting within the column, and countries might not be listed under the same names as our other datasets. Let's look at our nationalities to see:
 
 ```{r}
@@ -173,98 +103,6 @@ Artists %>%
   filter(Nationality == "Caribbean")
 ```
 
-We can use this as a guideline for which names to use as we tidy the wars datasets. For now, let's start by binding all of our wars together into one big list, and fixing the notation on it:
-```{r}
-#| label: combining war datasets
-
-# the lists for 1945 onward use different naming syntax
-# but we also can't use rename() when columns have identical names
-# so instead, we make a 1945 to now dataset and rename that one!
-
-wars_1945_now <- bind_rows(list(
-  wars_1945_1949,
-  wars_1950_1959,
-  wars_1960_1969,
-  wars_1970_1979,
-  wars_1980_1989,
-  wars_1990_2002,
-  wars_2003,
-  wars_2004,
-  wars_2005,
-  wars_2006_2009,
-  wars_2010_2019,
-  wars_2020_now
-))
-
-# the 1990-2002 has a random capital c on "Name of Conflict", so we have
-# to be tricky to rename it
-wars_1945_now <- wars_1945_now %>% 
-  mutate("Conflict Name" = coalesce(wars_1945_now$"Name of conflict", wars_1945_now$"Name of Conflict")) %>% 
-  select(-c("Name of Conflict", "Name of conflict")) %>% 
-  rename("Name of Conflict" = "Conflict Name",
-         Start = Started,
-         Finish = Ended,
-         Victorious = Belligerents...4,
-         Defeated = Belligerents...5) %>% 
-  filter(Start != "Started")
-
-# since we're already renaming the double "belligerents" columns, we might
-# as well pre-merge 1700 to 1944 as well:
-wars_1700_1944 <- bind_rows(list(
-  wars_1700_1799,
-  wars_1800_1809,
-  wars_1810_1819,
-  wars_1820_1829,
-  wars_1830_1839,
-  wars_1840_1849,
-  wars_1850_1859,
-  wars_1860_1869,
-  wars_1870_1879,
-  wars_1880_1889,
-  wars_1890_1899,
-  wars_1900_1909,
-  wars_1910_1919,
-  wars_1920_1929,
-  wars_1930_1944
-))
-
-wars_1700_1944 <- wars_1700_1944 %>% 
-  mutate("Conflict Name" = coalesce(wars_1700_1944$"Name of conflict", wars_1700_1944$"Name of Conflict")) %>% 
-  select(-c("Name of Conflict", "Name of conflict")) %>% 
-  rename("Name of Conflict" = "Conflict Name",
-         Victorious = Belligerents...4,
-         Defeated = Belligerents...5) %>% 
-  filter(Start != "Start")
-
-wars_1700_now <- bind_rows(list(
-  wars_1700_1944,
-  wars_1945_now
-))
-```
-
-Part of the problem here is that some values have Wikipedia notes on them, in the form of [note id]. The easiest first step here is to just get rid of those:
-```{r}
-wars_1700_now %>% 
-  mutate(Start_dig = str_extract(Start, "[:digit:]{4}"),
-         Finish_dig = str_extract(Finish, "[:digit:]{4}"),
-         Matching = Start_dig == Start & Finish_dig == Finish) %>% 
-  filter(Matching == FALSE)
-
-wars_1700_now %>% 
-  mutate(Start = str_remove(Start, "\\[[[:alnum:]]+\\]"),
-         Finish = str_remove(Finish, "\\[[[:alnum:]]+\\]"),
-         # extract capital letters followed by more letters (aka, proper nouns/names)
-         Victorious = str_extract_all(Victorious, "[:upper:]+[:alpha:]+"),
-         # collapse that list into a string to get (roughly) the countries involved
-         Victorious = str_c(Victorious),
-         # cut out the string stuff so it's just a normal looking list
-         Victorious = str_remove_all(Victorious, 'c\\(|\\"|\\)'),
-         Defeated = str_extract_all(Defeated, "[:upper:]+[:alpha:]+"),
-         Defeated = str_c(Defeated),
-         Defeated = str_remove_all(Defeated, 'c\\(|\\"|\\)'),
-         "Name of Conflict" = str_remove(wars_1700_now$"Name of Conflict", "\\[[[:alnum:]]+\\]")) %>% 
-  arrange(desc(Finish))
-```
 Now comes the unfortunate part. Our *artists* have nationalities (e.g., "French"), but our *wars* have countries (e.g., "France"). I don't think there's any good way to automate this, unfortunately; we just have to suck it up and make a big list of countries & nationality names:
 ```{r}
 #| label: nationality vs nation list
@@ -345,7 +183,7 @@ wars_artworks %>%
   mutate(n_tot = sum(n), # count how many pieces are in each war period
          prop = n / n_tot * 100, # get what percent of "pieces from this period" each category makes up
          prop = format(prop, scientific = FALSE)) %>% 
-  select(wars, Classification, prop) %>%
+  dplyr::select(wars, Classification, prop) %>%
   pivot_wider(names_from = wars, values_from = prop) %>% # move war periods to columns
   relocate(btw_wars, .after = ww1) %>% 
   relocate(post_ww2, .after = ww2) %>% 
@@ -368,7 +206,7 @@ war_range_artworks %>%
   mutate(n_tot = sum(n), # count how many pieces are in each war period
          prop = n / n_tot * 100, # get what percent of "pieces from this period" each category makes up
          prop = format(prop, scientific = FALSE)) %>% 
-  select(wars, Classification, prop) %>%
+  dplyr::select(wars, Classification, prop) %>%
   pivot_wider(names_from = wars, values_from = prop) %>% # move war periods to columns
   relocate(ww1_rising, .after = pre_ww1) %>% 
   relocate(btw_wars, .after = ww1_falling) %>% 
@@ -404,6 +242,45 @@ war_range_artworks %>%
 
 artworks %>% 
   ggplot(aes(x = Date)) + geom_histogram()
+
+wars_order <- c("none", "pre_ww1", "ww1_rising", "ww1", "ww1_falling",
+                "btw_wars", "ww2_rising", "ww2", "ww2_falling", "post_ww2")
+
+# stacked bar chart of the proportions table
+war_range_artworks %>% 
+  filter(wars != "none") %>% 
+  # count how many pieces are in each department/war period combo
+  count(wars, Department) %>% 
+  group_by(wars) %>% 
+  mutate(n_tot = sum(n), # count how many pieces are in each war period
+         prop = n / n_tot * 100) %>% # get what percent of "pieces from this period" each category makes up)
+  dplyr::select(wars, Department, prop) %>% 
+  filter(!is.na(Department)) %>%
+  ggplot(aes(x = wars, y = prop, fill = Department)) +
+  geom_col() +
+  scale_x_discrete(guide = guide_axis(angle = 45), limits = wars_order)
+
+# exclude the most prominent bars, to get a better look at the smaller proportions
+war_range_artworks %>% 
+  filter(wars != "none") %>% 
+  # count how many pieces are in each department/war period combo
+  count(wars, Department) %>% 
+  group_by(wars) %>% 
+  mutate(n_tot = sum(n), # count how many pieces are in each war period
+         prop = n / n_tot * 100) %>% # get what percent of "pieces from this period" each category makes up)
+  dplyr::select(wars, Department, prop) %>% 
+  filter(!is.na(Department) &
+           Department != "Architecture & Design" &
+           Department != "Drawings & Prints" &
+           Department != "Photography") %>%
+  ggplot(aes(x = wars, y = prop, fill = Department)) +
+  geom_col() +
+  scale_x_discrete(guide = guide_axis(angle = 45), limits = wars_order)
+
+top_mediums <- wars_artworks %>% 
+  count(Medium) %>% 
+  arrange(desc(n)) %>% 
+  slice(1:100)
 ```
 
 Some interesting notes:
@@ -418,15 +295,197 @@ Notes on the ranged data:
 
 * Over 6% of entries from just after WW2 were notebooks, comapared to .01% during WW2
 * Architecture entries were much higher proportionally during WW1 than right before or after it, while they were lower during WW2
-* 
+* The film proportion peaks right before WW1, but is completely absent during WW1 itself & around WW2
+* Much more of the post WW2 media is made up of smaller proportions (i.e., the 3 biggest departments make up less of the overall works)
 
 Now, let's take a look at dimensions of different pieces:
 ```{r}
 #| label: dimension of piece vs wartime
 
+compact_wars_order <- c("none", "pre_ww1", "ww1", "btw_wars", "ww2", "post_ww2")
+
+art_wars_area <- wars_artworks %>% 
+  mutate(area = height * width)
+
+art_war_range_area <- war_range_artworks %>% 
+  mutate(area = height * width)
+
 wars_artworks %>% 
-  filter(!is.na(`Height (cm)`) & !is.na(`Width (cm)`)) %>% 
-  mutate(area = `Height (cm)` * `Width (cm)`) %>%
-  filter(area < 10000 & wars != 'none') %>% 
-  ggplot(aes(x = area)) + geom_histogram() + facet_wrap(vars(wars))
+  filter(!is.na(height) & !is.na(width)) %>% 
+  mutate(area = height * width) %>%
+  ggplot(aes(x = wars, y = area)) +
+  geom_boxplot(outliers = FALSE) +
+  scale_x_discrete(limits = compact_wars_order)
+
+war_range_artworks %>% 
+  filter(!is.na(height) & !is.na(width)) %>% 
+  mutate(area = height * width) %>%
+  ggplot(aes(x = wars, y = area)) +
+  geom_boxplot(outliers = FALSE) +
+  scale_x_discrete(limits = wars_order)
+
+wars_artworks %>% 
+  filter(!is.na(height) & !is.na(width)) %>% 
+  mutate(area = height * width) %>% 
+  summarize(.by = wars,
+            min = min(area),
+            mean = mean(area),
+            stddev = sd(area),
+            max = max(area))
+
+wars_artworks %>% 
+  filter(!is.na(height) & !is.na(width) & wars != "none") %>% 
+  mutate(area = height * width) %>%
+  filter(area < 5000) %>% 
+  ggplot(aes(x = area, color = wars, fill = wars)) + geom_density(alpha = .1)
+```
+
+Notes:
+
+* All of the data distributions are in the normal-to-skewed-right range
+* The post WW2 time period has the most variability, and also has the highest area pieces
+* WW1 has less variability than the surrounding periods, but WW2 doesn't seem that different
+* Both WW1 and WW2 have a peak right before 500 cm^2^; this is higher than the peak before WW1, but lower than the (third) peak between the wars
+
+Next up, nationality!
+```{r}
+#| label: nationality vs war time
+
+wars_artworks %>% 
+  filter(!is.na(Nationality.x)) %>% 
+  summarize(.by = Nationality.x, count = n()) %>% 
+  filter(count >= 10) %>% 
+  arrange(Nationality.x)
+
+wars_artworks %>% 
+  filter(!is.na(Nationality.x)) %>% 
+  summarize(.by = Nationality.x, count = n()) %>% 
+  filter(count >= 75) %>% 
+  ggplot(aes(x = Nationality.x, y = count)) + geom_col() + scale_x_discrete(guide = guide_axis(angle = 45))
+
+wars_artworks %>% 
+  filter(!is.na(Nationality.x)) %>%
+  dplyr::select(Nationality.x, wars) %>% 
+  count(Nationality.x, wars) %>% 
+  group_by(Nationality.x) %>% 
+  mutate(total_count = sum(n)) %>% 
+  filter(total_count >= 75 & total_count <= 10000) %>%
+  ggplot(aes(x = Nationality.x, y = n, fill = wars)) + 
+    geom_col() +
+    scale_x_discrete(guide = guide_axis(angle = 45))
+
+wars_artworks %>% 
+  filter(!is.na(Nationality.x)) %>%
+  dplyr::select(Nationality.x, wars) %>% 
+  count(Nationality.x, wars) %>% 
+  group_by(Nationality.x) %>% 
+  mutate(total_count = sum(n)) %>% 
+  rename(partial_count = n) %>% 
+  arrange(desc(total_count)) %>%
+  row_number()
+```
+
+# Modeling
+
+Okay, let's do some modeling now!!! I'm starting with a decision tree, just to keep it simple
+```{r}
+#| label: lda
+
+set.seed(12345)
+
+top_nats <- artworks %>% 
+  count(Nationality.x) %>% 
+  arrange(desc(n)) %>% 
+  filter(n >= 100)
+
+art_factor <- art_wars_area %>%
+  filter(Nationality.x %in% top_nats$Nationality.x,
+         !is.na(Nationality.x),
+         !is.na(Gender.x),
+         !is.na(area),
+         !is.na(Classification))
+
+artwork_split <- initial_split(art_factor, prop = 0.9)
+
+art_train <- training(artwork_split)
+art_test <- testing(artwork_split)
+
+# art_tree <- rpart(Department ~ Classification, art_train, method = "class")
+
+# art_prune <- prune.rpart(art_tree, .01)
+
+# rpart.plot(art_tree, box.palette = "Blues")
+# rpart.plot(art_prune, box.palette = "Blues")
+
+# art_wars_area %>% 
+#   count(Department)
+
+lda_train <- art_train %>% 
+  filter(Medium %in% top_mediums$Medium,
+         !is.na(Medium))
+lda_test <- art_test %>% 
+  filter(Medium %in% top_mediums$Medium,
+         !is.na(Medium))
+
+# similar to lda, but we can still keep all the values
+knn_train <- art_train %>% 
+  filter(!is.na(Medium)) %>% 
+  mutate(Gender.x = case_when(
+    Gender.x == "male" ~ 0,
+    Gender.x == "female" ~ 1,
+    .default = NA
+  )) %>% 
+  filter(!is.na(Gender.x))
+knn_test <- art_test %>% 
+  filter(!is.na(Medium)) %>% 
+  mutate(Gender.x = case_when(
+    Gender.x == "male" ~ 0,
+    Gender.x == "female" ~ 1,
+    .default = NA
+  )) %>% 
+  filter(!is.na(Gender.x))
+
+lda_train %>% 
+  count(Nationality.x)
+  
+art_train %>% 
+  count(Nationality.x)
+
+lda_fit <- lda(wars ~ Nationality.x + Gender.x + Classification + area, data = art_train)
+lda_med_fit <- lda(wars ~ Nationality.x + Gender.x + Medium + area, data = lda_train)
+
+# qda_fit <- qda(wars ~ Nationality.x + Gender.x + Classification + area, data = art_train)
+
+# now use the fitted lda model to predict on the testing data
+lda_preds <- predict(lda_fit, lda_test)
+lda_med_preds <- predict(lda_med_fit, lda_test)
+
+mean(lda_preds$class == lda_test$wars, na.rm = TRUE)
+mean(lda_med_preds$class == lda_test$wars, na.rm = TRUE)
+
+lda_train_preds <- predict(lda_fit, lda_train)
+
+mean(lda_train_preds$class == lda_train$wars, na.rm = TRUE)
+
+mean(lda_test$wars == "post_ww2", na.rm = TRUE)
+
+
+# use lda to predict medium, using war information
+
+lda_medium_fit <- lda(Medium ~ wars + Nationality.x + Gender.x + area, data = lda_train)
+
+lda_medium_preds <- predict(lda_medium_fit, lda_test)
+
+mean(lda_medium_preds$class == lda_test$Medium)
+
+# use KNN
+
+# this was working before but nwo it's not. oh well !
+
+# knn_preds <- knn(train = knn_train[,39],
+#                  test = knn_test[,39],
+#                  cl = knn_train$wars,
+#                  k = 5) # use nationality, gender, medium, and area
+
+# mean(knn_preds == lda_test$wars)
 ```
